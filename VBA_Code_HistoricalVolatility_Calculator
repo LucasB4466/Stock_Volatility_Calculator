@@ -1,0 +1,421 @@
+Option Explicit
+Private Sub ClearThis()
+Application.DisplayAlerts = False
+On Error Resume Next
+Sheets("Test").Rows("1:4").EntireRow.Hidden = False
+Sheets("Volatility").Visible = True
+Sheets("Data").Visible = True
+Sheets("Volatility").Cells.Clear
+Sheets("Data").Cells.Clear
+Sheets("Matrix").Cells.Clear
+On Error Resume Next
+Sheets("Volatility Sheet").Delete
+DeleteNamedRanges
+Application.DisplayAlerts = True
+End Sub
+Private Sub DuplicateVolatility()
+Application.DisplayAlerts = False
+On Error Resume Next
+Sheets("Volatility Sheet").Delete
+Sheets("Volatility").Cells.Copy
+Sheets.Add
+ActiveSheet.Name = "Volatility Sheet"
+ActiveSheet.Range("A1").PasteSpecial xlPasteValues
+Application.CutCopyMode = False
+ActiveSheet.Columns("A:A").NumberFormat = "dd/mm/yyyy;@"
+Sheets("Volatility").Visible = xlVeryHidden
+Sheets("Data").Visible = xlVeryHidden
+Sheets("Test").Select
+Sheets("Test").Rows("1:4").EntireRow.Hidden = True
+Columns("E:F").Delete shift:=xlToLeft
+Range("A1").Select
+Application.DisplayAlerts = True
+End Sub
+
+Sub RunMe()
+ClearThis
+Sheets("Test").Select
+Attributes
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+Dim List As Range, LR As Long, cell As Range
+LR = Cells(Rows.Count, 1).End(xlUp).Row
+Set List = Range("A6:A" & LR)
+On Error GoTo handler
+For Each cell In List
+    cell.Copy Sheets("Test").Range("B2")
+    GetData
+    cell.Offset(0, 2).FormulaR1C1 = "=AVERAGE(Data!R[-5]C[4]:R[245]C[4])"
+    cell.Offset(0, 2).Copy
+    cell.Offset(0, 2).PasteSpecial Paste:=xlValues, Operation:=xlNone, SkipBlanks:= _
+        False, Transpose:=False
+    cell.Offset(0, 3).FormulaR1C1 = "=STDEV.P(Data!R[-4]C[3]:R[246]C[3])"
+    cell.Offset(0, 3).Copy
+    cell.Offset(0, 3).PasteSpecial Paste:=xlValues, Operation:=xlNone, SkipBlanks:= _
+        False, Transpose:=False
+    cell.Offset(0, 3).NumberFormat = "0.00"
+    LogVariance
+Next
+
+GetDates
+NameTheAsset
+CORRELATIONMATRIX
+DoCalculationsForEachTicker
+ThisWorkbook.Save
+handler:
+Sheets("Test").Select
+FormatAskBidSize
+DuplicateVolatility
+
+
+End Sub
+Private Sub GetData()
+    Dim DataSheet As Worksheet
+    Dim EndDate As Date
+    Dim StartDate As Date
+    Dim Symbol As String
+    Dim qurl As String
+    Dim nQuery As Name
+    Dim LastRow As Integer
+    Sheets("Test").Range("ticker").Value = UCase(Sheets("Test").Range("B2"))
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    Application.Calculation = xlCalculationManual
+    
+    Sheets("Data").Cells.Clear
+    
+    Set DataSheet = Sheets("Test")
+  
+        StartDate = DataSheet.Range("startDate").Value
+        EndDate = DataSheet.Range("endDate").Value
+        Symbol = DataSheet.Range("ticker").Value
+        Sheets("Data").Range("a1").CurrentRegion.ClearContents
+        
+        qurl = "http://ichart.finance.yahoo.com/table.csv?s=" & Symbol
+        qurl = qurl & "&a=" & Month(StartDate) - 1 & "&b=" & Day(StartDate) & _
+            "&c=" & Year(StartDate) & "&d=" & Month(EndDate) - 1 & "&e=" & _
+            Day(EndDate) & "&f=" & Year(EndDate) & "&g=" & Sheets("Data").Range("a1") & "&q=q&y=0&z=" & _
+            Symbol & "&x=.csv"
+                   
+QueryQuote:
+             With Sheets("Data").QueryTables.Add(Connection:="URL;" & qurl, Destination:=Sheets("Data").Range("a1"))
+                .BackgroundQuery = True
+                .TablesOnlyFromHTML = False
+                .Refresh BackgroundQuery:=False
+                .SaveData = True
+            End With
+            
+            Sheets("Data").Range("a1").CurrentRegion.TextToColumns Destination:=Sheets("Data").Range("a1"), DataType:=xlDelimited, _
+                TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=True, _
+                Semicolon:=False, Comma:=True, Space:=False, other:=False
+                
+    Sheets("Data").Columns("A:G").ColumnWidth = 12
+    LastRow = Sheets("Data").UsedRange.Row - 2 + Sheets("Data").UsedRange.Rows.Count
+    Sheets("Data").Sort.SortFields.Add Key:=Range("A2"), _
+        SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:=xlSortNormal
+    With Sheets("Data").Sort
+        .SetRange Range("A1:G" & LastRow)
+        .Header = xlYes
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+        .SortFields.Clear
+    End With
+End Sub
+Private Sub LogVariance()
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+Dim Vol As Worksheet: Set Vol = Sheets("Volatility")
+Dim D As Worksheet: Set D = Sheets("Data")
+D.Select
+Dim i As Integer
+Dim LR As Long
+LR = Cells(Rows.Count, 7).End(xlUp).Row
+Dim MeanRng As Range: Set MeanRng = Sheets("Test").Range("J2")
+'Set MeanRng.Formula = "=average(Range(Cells(2, 7), Cells(LR, 7)))"
+
+For i = 2 To LR - 1
+    Range("H" & i).FormulaR1C1 = "=LN(R[1]C[-1]/RC[-1])"
+Next
+D.Range("H2:H" & LR).Select
+Selection.Copy
+Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+    :=False, Transpose:=False
+Application.CutCopyMode = False
+D.Range("H2:H" & LR).NumberFormat = "0.00%"
+
+Dim EmptyColumn As Long
+'find empty Column (to insert new volatility range of ticker)
+EmptyColumn = Vol.Cells(2, Vol.Columns.Count).End(xlToLeft).Column + 1
+If EmptyColumn > 0 Then
+EmptyColumn = EmptyColumn
+End If
+D.Range("H2:H" & LR).Copy Vol.Cells(2, EmptyColumn)
+
+Application.CutCopyMode = False
+Vol.Select
+Vol.Cells(1, EmptyColumn).Value = Sheets("Test").Range("ticker").Value
+Vol.Cells(1, EmptyColumn).Font.Bold = True
+Application.ScreenUpdating = True
+Application.DisplayAlerts = True
+Application.Calculation = xlAutomatic
+End Sub
+Private Sub GetDates()
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+Sheets("Data").Select
+Dim LR As Long, MathRow As Long
+LR = Cells(Rows.Count, 1).End(xlUp).Row
+Range(Cells(1, 1), Cells(LR, 1)).Copy Sheets("Volatility").Range("A1")
+Sheets("Volatility").Select
+MathRow = Sheets("Volatility").Cells(Rows.Count, 1).End(xlUp).Row
+Range("A" & MathRow).Delete (xlUp)
+End Sub
+Private Sub NameTheAsset()
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+Dim NLastCol As Long, LastRo As Long
+Sheets("Volatility").Select
+Dim i As Integer
+Dim xlerr As Error
+
+NLastCol = Cells.Find(What:="*", after:=[A1], searchorder:=xlByColumns, searchdirection:=xlPrevious).Column
+LastRo = Cells(Rows.Count, 2).End(xlUp).Row
+
+For i = 2 To NLastCol
+Dim myRANGE As Range: Set myRANGE = Range(Cells(2, i), Cells(LastRo, i))
+    Range(Cells(2, i), Cells(LastRo, i)).Name = Cells(1, i).Text
+Next
+End Sub
+Private Sub CORRELATIONMATRIX()
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+Dim V As Worksheet: Set V = Sheets("Volatility")
+Dim T As Worksheet: Set T = Sheets("Test")
+Dim M As Worksheet: Set M = Sheets("Matrix")
+M.Cells.Clear
+'move ticker names
+Dim NamesofStocks, CorrelateRange As Range
+V.Select
+Dim NameLC As Long
+NameLC = Cells.Find(What:="*", after:=[A1], searchorder:=xlByColumns, searchdirection:=xlPrevious).Column
+Set NamesofStocks = V.Range(Cells(1, 2), Cells(1, NameLC))
+NamesofStocks.Copy M.Range("B1")
+NamesofStocks.Copy
+M.Range("A2").PasteSpecial Paste:=xlPasteAll, Operation:=xlNone, SkipBlanks:= _
+        False, Transpose:=True
+        
+'find range to correlate
+M.Activate
+
+Dim LR, LC As Long
+LC = M.Cells(1, Columns.Count).End(xlToLeft).Column
+LR = M.Cells(Rows.Count, 1).End(xlUp).Row
+
+Set CorrelateRange = M.Range(Cells(2, 2), Cells(LR, LC))
+CorrelateRange.FormulaR1C1 = "=ABS(CORREL(INDIRECT(RC1),INDIRECT(R1C)))"
+CorrelateRange.FormatConditions.AddColorScale ColorScaleType:=3
+'CorrelateRange.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+CorrelateRange.FormatConditions(1).ColorScaleCriteria(1).Type = xlConditionValueLowestValue
+    With CorrelateRange.FormatConditions(1).ColorScaleCriteria(1).FormatColor
+        .Color = 8109667
+        .TintAndShade = 0
+    End With
+    CorrelateRange.FormatConditions(1).ColorScaleCriteria(2).Type = _
+        xlConditionValuePercentile
+    CorrelateRange.FormatConditions(1).ColorScaleCriteria(2).Value = 50
+    With CorrelateRange.FormatConditions(1).ColorScaleCriteria(2).FormatColor
+        .Color = 8711167
+        .TintAndShade = 0
+    End With
+    CorrelateRange.FormatConditions(1).ColorScaleCriteria(3).Type = _
+        xlConditionValueHighestValue
+    With CorrelateRange.FormatConditions(1).ColorScaleCriteria(3).FormatColor
+        .Color = 7039480
+        .TintAndShade = 0
+    End With
+End Sub
+Private Sub DoCalculationsForEachTicker()
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+Dim V As Worksheet: Set V = Sheets("Volatility")
+Dim i As Integer
+V.Select
+Dim LR, LC As Long
+LC = Cells(1, Columns.Count).End(xlToLeft).Column
+LR = Cells(Rows.Count, 1).End(xlUp).Row
+Cells((LR + 1), 1).Value = "Total"
+Cells((LR + 2), 1).Value = "Mean"
+Cells((LR + 3), 1).Value = "Standard Deviation"
+Cells((LR + 4), 1).Value = "Variance"
+For i = 2 To LC
+    Cells(LR + 1, i).Formula = "=Sum(" & Cells(1, i).Value & ")"
+    Cells(LR + 1, i).NumberFormat = "0.00%"
+    Cells(LR + 2, i).Formula = "=average(" & Cells(1, i).Value & ")"
+    Cells(LR + 2, i).NumberFormat = "0.00%"
+    Cells(LR + 3, i).Formula = "=stdevp(" & Cells(1, i).Value & ")"
+    Cells(LR + 3, i).NumberFormat = "0.00"
+    Cells(LR + 4, i).Formula = "=varp(" & Cells(1, i).Value & ")"
+    Cells(LR + 4, i).NumberFormat = "0.00"
+Next
+Application.ScreenUpdating = True
+Application.DisplayAlerts = True
+Application.Calculation = xlAutomatic
+End Sub
+Private Sub GetMeanandStdev()
+Sheets("Data").Activate
+Dim LR As Long
+LR = Cells(Rows.Count, 7).End(xlUp).Row
+Dim MeanRng As Range: Set MeanRng = Range(Cells(2, 7), Cells(LR, 7))
+Dim Target As Range
+Set Target = Sheets("Test").Range("B6")
+
+Sheets("Test").Select
+End Sub
+Private Sub DeleteNamedRanges()
+Application.ScreenUpdating = False
+'delete named ranges
+    Dim sName As Name
+        For Each sName In ThisWorkbook.Names
+            If InStr(1, sName, "Table") Then
+                sName.Delete
+            End If
+        Next
+End Sub
+
+Sub Attributes()
+Sheets("Test").Cells.Clear
+Dim WatchList As String
+WatchList = InputBox("Put in Ticker Symbols Seperated by Spaces ", "WatchList", "Ex. AAPL GOOG YHOO")
+Application.DisplayAlerts = False
+If WatchList = "" Then MsgBox ("You Didn't enter any tickers. Press end on the next error screen and retry.")
+
+
+Dim StockSheet As Worksheet
+Dim DataSheet As Worksheet
+Dim AttributeSheet As Worksheet
+Dim Symbol As String
+Dim Attribs As String
+'create a web query in the current worksheet
+'connect to the web, retrieve data, and paste it in the worksheet as static text
+'Sheets("Attributes").Cells.Clear
+Application.ScreenUpdating = False
+'Application.DisplayAlerts = False
+Application.Calculation = xlCalculationManual
+        Set StockSheet = Sheets("Test")
+        Symbol = WatchList
+        Attribs = "snc1aa5bb6m4m3kjwf6b4rr5s7p6p5ydr1qej4j1ld1k3t1e9e7r6e8r7"
+With StockSheet.QueryTables.Add _
+(Connection:="URL;http://download.finance.yahoo.com/d/quotes.csv?s=" & Symbol & "&f=" & Attribs & "&e=.csv", Destination:=StockSheet.Range("a6"))
+    .Name = "Attributes"
+    .BackgroundQuery = True
+    .TablesOnlyFromHTML = False
+    .Refresh BackgroundQuery:=False
+    .SaveData = True
+End With
+
+With StockSheet
+StockSheet.Range("a6").CurrentRegion.TextToColumns Destination:=StockSheet.Range("a6"), DataType:=xlDelimited, _
+TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=True, Semicolon:=False, Comma:=True, Space:=False, other:=False
+End With
+
+Application.ScreenUpdating = True
+Application.DisplayAlerts = True
+Application.Calculation = xlCalculationAutomatic
+ActiveSheet.Columns.AutoFit
+Adjustinfo
+End Sub
+
+Private Sub Adjustinfo()
+Range("A2").Value = "TICKER"
+Range("A3").Value = "Start:"
+Range("A4").Value = "End:"
+
+Range("B2").Name = "ticker"
+Range("B3").Name = "startDate"
+Range("B4").Name = "endDate"
+Range("B3").Value = InputBox("When do you want to start?", "Type in a date", "EX: 1/1/15")
+Range("B4").Value = "=today()"
+ActiveSheet.Range("A5").Value = "Symbol "
+ActiveSheet.Range("B5").Value = "Name "
+ActiveSheet.Range("C5").Value = "Change "
+ActiveSheet.Range("D5").Value = "Ask "
+ActiveSheet.Range("E5").Value = "Ask Size"
+ActiveSheet.Range("F5").Value = "Bid "
+ActiveSheet.Range("G5").Value = "Bid Size "
+ActiveSheet.Range("H5").Value = "200-day Moving Average"
+ActiveSheet.Range("I5").Value = "50-day Moving Average "
+ActiveSheet.Range("J5").Value = "52-week High "
+ActiveSheet.Range("K5").Value = "52-week Low "
+ActiveSheet.Range("L5").Value = "52-week Range"
+ActiveSheet.Range("M5").Value = "Float Shares "
+ActiveSheet.Range("N5").Value = "Book Value "
+ActiveSheet.Range("O5").Value = "P/E Ratio "
+ActiveSheet.Range("P5").Value = "PEG Ratio "
+ActiveSheet.Range("Q5").Value = "Short Ratio "
+ActiveSheet.Range("R5").Value = "Price/Book"
+ActiveSheet.Range("S5").Value = "Price/Sales "
+ActiveSheet.Range("T5").Value = "Dividend Yield "
+ActiveSheet.Range("U5").Value = "Dividend/Share "
+ActiveSheet.Range("V5").Value = "Dividend Pay Date"
+ActiveSheet.Range("W5").Value = "Ex-Dividend Date "
+ActiveSheet.Range("X5").Value = "Earnings/Share "
+ActiveSheet.Range("Y5").Value = "EBITDA"
+ActiveSheet.Range("Z5").Value = "Market Capitalization "
+ActiveSheet.Range("AA5").Value = "Last Trade (With Time) "
+ActiveSheet.Range("AB5").Value = "Last Trade Date"
+ActiveSheet.Range("AC5").Value = "Last Trade Size "
+ActiveSheet.Range("AD5").Value = "Last Trade Time "
+ActiveSheet.Range("AE5").Value = "EPS Estimate Next Quarter"
+ActiveSheet.Range("AF5").Value = "EPS Estimate Current Year "
+ActiveSheet.Range("AG5").Value = "Price/EPS Estimate Current Year"
+ActiveSheet.Range("AH5").Value = "EPS Estimate Next Year "
+ActiveSheet.Range("AI5").Value = "Price/EPS Estimate Next Year "
+Columns("C:D").Select
+Selection.Insert shift:=xlToRight
+ActiveSheet.Range("C5").Value = "Mean"
+ActiveSheet.Range("D5").Value = "Standard Deviation"
+ActiveSheet.Columns.AutoFit
+End Sub
+Sub Macro1()
+'
+' Macro1 Macro
+'
+
+'
+End Sub
+Private Sub FormatAskBidSize()
+    Columns("E:F").Select
+    Selection.Insert shift:=xlToRight
+    Range("I6").Select
+'
+Dim i As Integer
+        
+Dim AskSize As Range, LR As Long, Bcell As Range, Acell As Range, BidSize As Range
+LR = Cells(Rows.Count, 10).End(xlUp).Row
+Set AskSize = Range("I6:I" & LR)
+Set BidSize = Range("k6:k" & LR)
+For Each Acell In AskSize
+'Set cell = Range(Cells(6, 9), Cells(LR, 9))
+    If Acell.Offset(0, 2).Value < Acell.Value Then
+        Acell.Font.ColorIndex = 4
+      '  cell.Select
+       ' cell.Offset(0, 2).Font.ColorIndex = 3
+    End If
+Next
+
+For Each Bcell In BidSize
+    If Bcell.Offset(0, 2).Value < Bcell.Value Then
+    Bcell.Font.ColorIndex = 3
+   ' cell.Select
+   ' cell.Offset(0, -2).Font.ColorIndex = 4
+    End If
+Next
+End Sub
