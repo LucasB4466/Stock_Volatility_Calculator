@@ -23,9 +23,9 @@ Close workbook and open to run the macro.
 
 
 
-##<P/>This workbook will ask you for stock tickers when it opens. It will then pull the attributes _ </P>
+##<P/>This workbook will ask you for stock tickers when it opens. It will then pull the attributes  </P>
 
-<P/>The end result displays a correlation matrix, historical volatility, and attributes of the stock. _ </P>
+<P/>The end result displays a correlation matrix, historical volatility, and attributes of the stock.  </P>
 <P/>You can copy [this code] (https://raw.githubusercontent.com/HotBreakfast/Stock_Volatility_Calculator/master/VBA_Code_HistoricalVolatility_Calculator "this code") and put it into a module. </P>
 
 
@@ -36,5 +36,5 @@ Close workbook and open to run the macro.
 ##<P/>End Sub
 
 <P/>Close workbook and open to run the macro.
-<P/>VBA code to get the historical volatility of stocks over a date range. The end result shows the volatility, _
+<P/>VBA code to get the historical volatility of stocks over a date range. The end result shows the volatility, 
 a correlation matrix, and attributes of the stock tickers
