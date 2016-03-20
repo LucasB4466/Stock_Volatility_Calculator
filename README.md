@@ -1,4 +1,4 @@
-# [Stock_Volatility_Calculator] (https://raw.githubusercontent.com/HotBreakfast/Stock_Volatility_Calculator/master/VBA_Code_HistoricalVolatility_Calculator "Calculator")
+#Excel [Stock Volatility Calculator] (https://raw.githubusercontent.com/HotBreakfast/Stock_Volatility_Calculator/master/VBA_Code_HistoricalVolatility_Calculator "Calculator")
 #-------
 <P/>This workbook will ask for stock tickers when it opens. It will then pull the attributes of the tickers and ask for a date range</P>
 <P/>to measure the historical volatility of the stock tickers. The end result displays a correlation matrix, historical volatility,</P> <P/> and attributes of the stock. You can copy this code and put it into a module. </P>
