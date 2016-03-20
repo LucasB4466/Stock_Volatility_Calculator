@@ -19,7 +19,7 @@ RunMe
 End Sub
 
 Close workbook and open to run the macro.
-#-------
+
 
 
 
@@ -35,6 +35,6 @@ Close workbook and open to run the macro.
 ##<P/>RunMe
 ##<P/>End Sub
 
-<P/>Close workbook and open to run the macro.
+<P/>Close workbook and open to run the macro (**After saving it as a .xlsm document***).
 <P/>VBA code to get the historical volatility of stocks over a date range. The end result shows the volatility, 
 a correlation matrix, and attributes of the stock tickers
