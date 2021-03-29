@@ -1,0 +1,13 @@
+Impossible to run the code here.
+
+With StockSheet.QueryTables.Add _
+(Connection:="URL;http://download.finance.yahoo.com/d/quotes.csv?s=" & Symbol & "&f=" & Attribs & "&e=.csv", Destination:=StockSheet.Range("a6"))
+    .Name = "Attributes"
+    .BackgroundQuery = True
+    .TablesOnlyFromHTML = False
+    .Refresh BackgroundQuery:=False
+    .SaveData = True
+End With
+
+
+#It was written "unable to open http //download.finance.yahoo.com/d/quotes.csv"
